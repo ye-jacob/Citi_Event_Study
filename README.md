@@ -192,8 +192,17 @@ Which one counts as "the actual" is an analytical decision, so the tooling force
 be made explicitly on every run. Both vintages can coexist in the DB (distinguished by
 `source` / `is_first_print`).
 
-Useful flags: `--indicators CPI NFP` (subset), `--skip-curve`, `--skip-releases`,
+Useful flags: `--indicators CPI GDP` (subset), `--skip-curve`, `--skip-releases`,
 `--db path.db`.
+
+### Audit export
+
+```bash
+python -m src.ingest.export_csv   # -> data/exports/releases.csv, curve.csv
+```
+
+Column-by-column provenance with links (for manual verification against BLS/BEA/
+Fed sources) lives in [`data/exports/DATA_DICTIONARY.md`](data/exports/DATA_DICTIONARY.md).
 
 ### Tests
 
