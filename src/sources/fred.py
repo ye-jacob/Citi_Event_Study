@@ -26,6 +26,13 @@ Remaining approximations (documented, human verifies before publishing):
 - The release date is ALFRED's ``realtime_start`` of the first vintage — the
   publication date for these series. The release *time* comes from the
   indicator registry (e.g. 08:30 ET); ALFRED has no intraday timestamps.
+- SERIES-INCEPTION TRAP: a series' vintages only exist from the day it was
+  ADDED to FRED — earlier observations' "first vintage" is that day's revised
+  value with a fake release date. Verified cases: A191RL1Q225SBEA (added
+  2014-09-26; GDP study rows therefore come from the Atlanta Fed track record
+  instead — see gdpnow.py) and PCEPI (vintages start 2000-08, so the first ~6
+  months of PCE baseline rows share one date). Check ALFRED vintage coverage
+  before trusting early history of any newly added series.
 - Published prints are rounded (CPI MoM to 0.1pp); values here carry full
   precision. TODO(human): decide precision policy for surprises.
 """
@@ -117,7 +124,7 @@ class FredDataSource(DataSource):
                         release_date.date(), meta["release_time"]
                     ),
                     actual=float(actual),
-                    consensus=None,  # FRED has no consensus; see naive/bloomberg
+                    consensus=None,  # FRED has none; see naive/consensus providers
                     consensus_stdev=None,
                     n_estimates=None,
                     previous=None if pd.isna(prev) else float(prev),
@@ -145,6 +152,14 @@ class FredDataSource(DataSource):
 
         The release date is always the first vintage's realtime_start — even for
         vintage="latest", the *event* happened when the first print hit the tape.
+
+        Pre-inception backfill is dropped: observations published before the
+        series was added to FRED all share the series' minimum realtime_start —
+        their "first vintage" is a revision with a fake release date, not a
+        first print (the series-inception trap in the module docstring). Two or
+        more observations at the minimum is that signature; a single one is a
+        legitimate first release and is kept. Genuine multi-period release days
+        (e.g. shutdown catch-up prints) sit mid-history and are unaffected.
         """
         grouped = vintages.groupby("date")
         out = pd.DataFrame(
@@ -154,6 +169,9 @@ class FredDataSource(DataSource):
                 "latest_value": grouped["value"].last(),
             }
         )
+        backfilled = out["release_date"] == vintages["realtime_start"].min()
+        if backfilled.sum() > 1:
+            out = out[~backfilled]
         return out.sort_index()
 
     def _transformed_actuals(

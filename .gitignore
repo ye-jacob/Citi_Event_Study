@@ -16,10 +16,9 @@ venv/
 .vscode/
 .idea/
 
-# Bloomberg-sourced data must never land in a public repo (licensing).
-# Keep every Bloomberg export under data/bloomberg/ so this rule catches it.
-data/bloomberg/
-*.bloomberg.csv
+# Manually-collected consensus whose license/provenance forbids committing:
+# keep it under data/private/ so this rule catches it.
+data/private/
 
 # Local scratch DBs (the canonical committed DB is data/event_study.db)
 data/*.tmp.db

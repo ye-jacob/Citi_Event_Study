@@ -62,8 +62,9 @@ or a Plotly helper — proceed.
 ## The pipeline
 
 ```
-Raw data       Bloomberg (consensus, first-print actual, forecast dispersion)
-               + FRED/ALFRED (actual vintages, Treasury curve)
+Raw data       FRED/ALFRED (actual vintages, Treasury curve)
+               + public consensus: Cleveland Fed inflation nowcast (CPI/PCE),
+                 Atlanta Fed GDPNow (advance GDP), manual CSV of public figures
       |
       v
 Normalize      two tables — releases (per event) and curve (date x tenor)
@@ -152,11 +153,22 @@ class DataSource(ABC):
     def get_curve(self, start, end) -> pd.DataFrame: ...  # tenor cols, date index
 ```
 
-Consensus sourcing, in order: (1) **Bloomberg one-time CSV export** via `ECO <GO>` + the
-Excel add-in (`=BDH()`) — best history, includes forecast dispersion; imported offline, the
-app never calls Bloomberg live. (2) **Naive proxy** — expectation = previous value or a
-simple AR model; always available, good for building the pipeline and as a permanent
-baseline to compare real consensus against.
+Consensus sourcing (Bloomberg access ended 2026-07 — the project uses free,
+ToS-clean public sources only), in order: (1) **Fed-published nowcasts** —
+Cleveland Fed inflation nowcast for CPI/PCE (daily evolution per month since
+2013-07, cut strictly pre-release) and Atlanta Fed GDPNow for the advance GDP
+print (final pre-release forecast since 2011Q3). These are model nowcasts, not
+survey medians, and carry no dispersion — the writeup frames them accordingly
+and standardization falls back to historical surprise stdev. (2) **Manual CSV
+import** (`ConsensusCsvSource`) — hand-collected public figures (news-wire
+recaps, SPF tables); the revival path for indicators without a programmatic
+source. (3) **Naive proxy** — expectation = previous value; always available,
+permanent baseline to compare real consensus against.
+
+**Study scope:** only indicators with a public consensus source are active —
+CPI, PCE, GDP. NFP, UNRATE, Retail Sales and Jobless Claims are deactivated in
+the registry (their survey consensus exists only behind vendors or
+scraping-prohibited calendar sites); revive any of them via manual CSV.
 
 ## Data model (minimum)
 
@@ -172,6 +184,11 @@ baseline to compare real consensus against.
   published print*, not today's revised value. Revised FRED data silently corrupts historical
   surprises. Use ALFRED / first-release vintages and store `is_first_print`. This is the
   clearest single signal of understanding data releases — the human decides and owns it.
+- **Series-inception trap (discovered 2026-07).** ALFRED vintages exist only from the day a
+  series was *added to FRED* — earlier observations' "first vintage" is a revision with a
+  fake release date (the SAAR GDP series had 20 such quarters; PCEPI's first months too).
+  The FRED client drops that backfill signature; GDP study rows come from the Atlanta Fed
+  track record instead. Check vintage coverage before trusting any series' early history.
 - **FOMC surprise is special (human-owned).** The surprise is the *unexpected* component vs.
   what fed-funds futures priced in, not the raw target change. Do not treat every rate change
   as a full surprise.
@@ -202,9 +219,10 @@ so the app can't write or persist a DB at runtime and can't run a scheduler. Pat
 2. **The Streamlit app only reads** committed data, wrapped in `st.cache_data`. No writes.
 
 Free Community Cloud requires a **public repo** (private works with broader GitHub scope).
-A public repo means committed data is public — **keep Bloomberg-sourced consensus out of a
-public repo**; use it only in local runs, or make the repo private. Alternatives with
-persistent disk: Hugging Face Spaces, Render, Railway.
+All committed data is from free public sources (FRED/ALFRED, Cleveland Fed, Atlanta Fed),
+so committing it is fine; anything whose provenance forbids redistribution goes under
+`data/private/` (gitignored). Alternatives with persistent disk: Hugging Face Spaces,
+Render, Railway.
 
 ## Project structure
 
@@ -216,7 +234,8 @@ persistent disk: Hugging Face Spaces, Render, Railway.
 │   ├── findings.md
 │   └── figures/
 ├── src/
-│   ├── sources/              # base.py, fred.py, bloomberg_csv.py, naive.py
+│   ├── sources/              # base.py, fred.py, consensus.py, cleveland_fed.py,
+│   │                         #   gdpnow.py, naive.py, consensus_csv.py
 │   ├── ingest/
 │   ├── analytics/            # surprise.py, curve.py, event_study.py  (human-owned core)
 │   ├── models.py
@@ -232,5 +251,6 @@ persistent disk: Hugging Face Spaces, Render, Railway.
 3. **Surprise + standardized surprise.** *(human decides vintage handling; Claude Code stubs)*
 4. **Event study: pre/post curve deltas, decomposition, betas by regime.** *(human-owned)*
 5. **Findings writeup — 2–3 results, charts, methodology, limitations.** *(human-owned — the deliverable)*
-6. Import Bloomberg consensus CSV; replace proxy where real consensus exists. *(human runs export)*
+6. Public real consensus: Cleveland Fed nowcast (CPI/PCE) + GDPNow (GDP), alongside the
+   proxy baseline. *(done — Claude Code; manual CSVs revive removed indicators)*
 7. *(Optional)* Streamlit demo over the precomputed results + Actions ingest. *(Claude Code)*

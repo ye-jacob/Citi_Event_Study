@@ -1,7 +1,8 @@
 """The DataSource abstraction (CLAUDE.md "Data-source abstraction").
 
-No analytics or UI code calls a vendor directly — Bloomberg, FRED/ALFRED, and
-the naive proxy all populate the same normalized shapes defined here.
+No analytics or UI code calls a vendor directly — FRED/ALFRED, the Fed nowcast
+providers, manual CSVs, and the naive proxy all populate the same normalized
+shapes defined here.
 """
 
 from __future__ import annotations

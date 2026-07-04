@@ -172,6 +172,33 @@ def test_transform_none_takes_first_print_as_is(fake):
     assert releases[1].previous == pytest.approx(100.0)
 
 
+def test_pre_inception_backfill_dropped(fake):
+    # A series added to FRED on 2024-05-01: Jan/Feb/Mar all "first appear" that
+    # day (backfill — revisions with fake release dates), Apr genuinely prints
+    # on 2024-05-03. Only Apr may survive as a first print.
+    fake.all_releases = pd.DataFrame(
+        {
+            "realtime_start": pd.to_datetime(
+                ["2024-05-01", "2024-05-01", "2024-05-01", "2024-05-03"]
+            ),
+            "date": pd.to_datetime(
+                ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01"]
+            ),
+            "value": [5.0, 5.1, 5.2, 5.3],
+        }
+    )
+    releases = _src(fake).get_releases("UNRATE", date(2024, 1, 1), date(2024, 12, 31))
+    assert [r.ref_period for r in releases] == [date(2024, 4, 1)]
+    assert releases[0].actual == pytest.approx(5.3)
+
+
+def test_single_obs_at_minimum_realtime_is_kept(fake):
+    # The default fixture's earliest vintage (2024-02-13) covers exactly ONE
+    # observation — a legitimate first release, not backfill.
+    releases = _src(fake).get_releases("UNRATE", date(2024, 1, 1), date(2024, 12, 31))
+    assert releases[0].ref_period == date(2024, 1, 1)
+
+
 # ------------------------------------------------------ latest-vintage path
 
 

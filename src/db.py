@@ -61,6 +61,7 @@ def seed_indicators(session: Session) -> None:
         ind.release_time = row["release_time"]
         ind.transform = row["transform"]
         ind.units = row["units"]
+        ind.consensus_source = row["consensus"]
         ind.active = row["active"]
         ind.notes = row["notes"]
     session.flush()

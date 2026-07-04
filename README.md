@@ -45,6 +45,14 @@ Validated against the published record (NFP, first prints):
 | Feb 2024 | +108k | **+275k** | +275k ✓ |
 | Mar 2024 | +325k | **+303k** | +303k ✓ |
 
+A second vintage trap, caught and handled: a series' ALFRED vintages only exist
+from the day it was **added to FRED** — for the SAAR GDP series that was
+2014-09-26, meaning 20 earlier quarters shared one fake "release date" and a
+revised value masquerading as a first print. The FRED client now drops that
+backfill signature generically, and GDP study rows are built instead from the
+**Atlanta Fed's own track record** of advance estimates and release dates
+(verified equal to ALFRED prints on every overlapping post-2014 quarter).
+
 ### Surprises are standardized and sign-adjusted
 
 - `raw = actual − consensus` (not comparable across indicators)
@@ -90,42 +98,54 @@ FRED/ALFRED (first-print vintages, Treasury curve)      Bloomberg ECO export (op
 
 ## Data
 
-### Sources
+### Sources — all free and ToS-clean (no Bloomberg dependency)
 
 | Source | Provides | Mode |
 |---|---|---|
 | **FRED/ALFRED** (`fredapi`) | Actuals (first-print *and* latest vintages), Treasury curve (`DGS2/5/10/30`, more available) | Live API, free key |
+| **Cleveland Fed inflation nowcast** | CPI & PCE MoM expectations — daily nowcast evolution per month since 2013-07, cut strictly before each release | Public chart feed (JSON) |
+| **Atlanta Fed GDPNow** | Final pre-release model forecast per quarter since 2011Q3, plus the recorded advance estimate & release date | Public tracking workbook (XLSX) |
 | **Naive proxy** | Consensus = previous as-reported value (the "no-change" forecast). Always available; permanent baseline to compare real consensus against | Derived |
-| **Bloomberg ECO CSV** | Real survey consensus, forecast dispersion, estimate counts | One-time offline export (`ECO <GO>` + Excel add-in); the app never calls Bloomberg |
+| **Manual CSV** (`ConsensusCsvSource`) | Any hand-collected public consensus (news-wire recaps, SPF tables) — the revival path for removed indicators | Offline import |
 
-Consensus provenance is encoded in `releases.source` (e.g. `fred_first+naive_prev`,
-`bloomberg_csv`), so proxy rows and real-consensus rows coexist and can be compared.
+The Fed nowcasts are **model nowcasts, not survey medians** — a documented
+substitute for vendor consensus, framed as such in the methodology. Neither
+provides forecast dispersion, so standardized surprises use the historical-stdev
+fallback. Consensus provenance is encoded in `releases.source`
+(`fred_first+naive_prev`, `fred_first+cleveland_fed`, `gdpnow_track`), so
+baseline and real-consensus rows coexist and can be compared.
 
-> **Licensing note:** even in a private repo, keep Bloomberg exports out of git —
-> `data/bloomberg/` is gitignored for that reason.
+> Data whose provenance/license forbids committing belongs under `data/private/`
+> (gitignored).
 
 ### Indicators
 
 | Key | Series (actual) | Quoted as | Yield sign | Status |
 |---|---|---|---|---|
-| CPI | `CPIAUCSL` | % m/m | +1 | active |
-| PCE | `PCEPI` | % m/m | +1 | active |
-| NFP | `PAYEMS` | Δ level, k | +1 | active |
-| UNRATE | `UNRATE` | % | −1 | active |
-| RETAIL | `RSAFS` | % m/m | +1 | active |
-| GDP | `A191RL1Q225SBEA` | % q/q SAAR | +1 | active |
-| CLAIMS | `ICSA` | level | −1 | active |
+| CPI | `CPIAUCSL` | % m/m | +1 | **active** — Cleveland Fed consensus (2013-08+) |
+| PCE | `PCEPI` | % m/m | +1 | **active** — Cleveland Fed consensus (2013-07+) |
+| GDP | advance estimate (Atlanta Fed track record) | % q/q SAAR | +1 | **active** — GDPNow consensus (2011Q3+) |
+| NFP | `PAYEMS` | Δ level, k | +1 | **removed** — no public per-release consensus |
+| UNRATE | `UNRATE` | % | −1 | **removed** — same |
+| RETAIL | `RSAFS` | % m/m | +1 | **removed** — same |
+| CLAIMS | `ICSA` | level | −1 | **removed** — same |
 | FOMC | `DFEDTARU` | target | +1 | **inactive** until futures-based surprise exists |
 | ISM_MFG / ISM_SRV | — | index | +1 | **inactive** (licensing) |
 
-Registry rows are starting points and carry `TODO(human): verify` notes (headline vs.
-core, exact number consensus is quoted against). See `src/config.py`.
+Removed ≠ deleted: survey consensus for NFP/UNRATE/Retail/Claims exists only
+behind vendors or scraping-prohibited calendar sites. Any of them revives by
+importing hand-collected public figures through `ConsensusCsvSource`.
 
-### Current inventory (first ingest, July 2026)
+### Current inventory (July 2026)
 
-First-print releases from 2000-01 to present: ~2,070 rows across the seven active
-indicators (weekly claims ≈ 1,380 of them), plus 26,500+ curve points (2Y/5Y/10Y/30Y
-daily closes). Refreshed by re-running the ingest; upserts are idempotent.
+| Indicator | Baseline rows (naive, 2000+) | Real-consensus rows |
+|---|---|---|
+| CPI | 316 | 153 (Cleveland Fed, 2013-08 →) |
+| PCE | 310 | 155 (Cleveland Fed, 2013-07 →) |
+| GDP | 47 (post-2014 vintages only) | 59 (GDPNow track record, 2011Q3 →) |
+
+Plus 26,500+ curve points (2Y/5Y/10Y/30Y daily closes, 2000 →). Refreshed by
+re-running the ingest; upserts are idempotent.
 
 ### Schema (SQLite, `data/event_study.db`)
 
@@ -235,9 +255,12 @@ persistent disk.
 │   ├── charts.py             # Plotly helpers (CVD-validated palette)
 │   ├── sources/
 │   │   ├── base.py           # DataSource ABC + normalized Release
-│   │   ├── fred.py           # FRED/ALFRED client, both vintages, same-vintage rule
+│   │   ├── fred.py           # FRED/ALFRED client: vintages, same-vintage rule, backfill guard
+│   │   ├── consensus.py      # ConsensusProvider protocol + overlay
+│   │   ├── cleveland_fed.py  # CPI/PCE nowcast consensus (public JSON feed)
+│   │   ├── gdpnow.py         # GDP consensus + authoritative advance-release rows
 │   │   ├── naive.py          # consensus = previous (baseline proxy)
-│   │   └── bloomberg_csv.py  # offline ECO export parser
+│   │   └── consensus_csv.py  # manual public-consensus importer (revival path)
 │   ├── ingest/run_ingest.py  # CLI (requires --vintage)
 │   ├── analytics/
 │   │   ├── curve.py          # level / 2s10s / 5s30s / curvature math
@@ -254,10 +277,10 @@ persistent disk.
 |---|---|---|
 | 1 | Schema, DB, `DataSource` interface, FRED/ALFRED client | ✅ done |
 | 2 | First-print actuals + curve ingested; naive consensus baseline | ✅ done (2000→present) |
-| 3 | Surprise + standardized surprise | 🔶 next — `src/analytics/surprise.py` |
-| 4 | Event windows, curve deltas, betas by regime | 🔶 stubbed — `src/analytics/event_study.py` |
-| 5 | Findings writeup (2–3 results, methodology, limitations) | 🔶 skeleton — `analysis/findings.md` |
-| 6 | Bloomberg consensus import (replace proxy where real consensus exists) | ⬜ optional |
+| 3 | Public real consensus (Cleveland Fed nowcast, GDPNow) integrated | ✅ done (replaces Bloomberg) |
+| 4 | Surprise + standardized surprise | 🔶 next — `src/analytics/surprise.py` |
+| 5 | Event windows, curve deltas, betas by regime | 🔶 stubbed — `src/analytics/event_study.py` |
+| 6 | Findings writeup (2–3 results, methodology, limitations) | 🔶 skeleton — `analysis/findings.md` |
 | 7 | Streamlit demo + scheduled ingest | ✅ shell + workflow ready (cron pending vintage policy) |
 
 ## Division of labor
@@ -274,9 +297,13 @@ and the test suite asserts they stay that way.
 
 - Daily H.15 closes mean the event window brackets the whole release day, not the
   release minute — intraday futures would tighten this.
-- Naive-proxy consensus is a no-change forecast: fine as a baseline, weaker than
-  survey medians; results are re-checked against real consensus where available.
-- Small samples per (indicator × regime) cell; betas ship with error bars, not just
-  point estimates.
+- The "consensus" for CPI/PCE/GDP is a **Fed model nowcast, not a survey median** —
+  a documented substitute after Bloomberg access ended. No forecast dispersion, so
+  standardization uses the historical stdev of raw surprises.
+- Real-consensus samples are shorter than the actuals history: CPI/PCE from
+  2013, GDP from 2011 — small samples per (indicator × regime) cell; betas ship
+  with error bars, not just point estimates.
+- The study set is three indicators; the labor-market complex (NFP, claims) is
+  absent until public consensus is hand-collected for it.
 - Published prints are rounded (CPI to 0.1pp); stored values carry full precision —
   the precision policy for surprises is an open, documented decision.

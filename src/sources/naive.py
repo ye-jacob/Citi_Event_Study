@@ -1,9 +1,10 @@
 """Naive consensus proxy: expectation = previous value.
 
 Wraps any DataSource and fills ``consensus`` with the prior period's value (the
-"no-change" forecast). Always available, so the pipeline runs end-to-end before
-any Bloomberg export exists — and it stays useful afterwards as the permanent
-baseline real consensus is compared against (CLAUDE.md "Consensus sourcing").
+"no-change" forecast). Always available for every indicator and the full
+history, and it stays useful as the permanent baseline the real consensus
+sources (Fed nowcasts, manual CSVs) are compared against (CLAUDE.md
+"Consensus sourcing").
 
 It provides no forecast dispersion (``consensus_stdev`` stays None), so
 standardized surprises built on it must fall back to the historical stdev of

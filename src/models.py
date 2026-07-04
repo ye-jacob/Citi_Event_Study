@@ -5,9 +5,10 @@ Conventions
 - Yields are stored in PERCENT (FRED H.15 convention); curve-shape *deltas* in
   event_impacts are stored in BASIS POINTS.
 - ``release_datetime`` is ET-naive (all release times are defined in ET).
-- ``releases.source`` records provenance as "<actual source>+<consensus source>",
-  e.g. "fred_first+naive_prev" or "bloomberg_csv", so naive-proxy rows and real
-  consensus rows can coexist and be compared.
+- ``releases.source`` records provenance as "<actual source>+<consensus source>"
+  (e.g. "fred_first+naive_prev", "fred_first+cleveland_fed") or a self-contained
+  label ("gdpnow_track"), so naive-proxy rows and real-consensus rows coexist
+  and can be compared.
 """
 
 from __future__ import annotations
@@ -46,6 +47,8 @@ class Indicator(Base):
     release_time: Mapped[time] = mapped_column(Time)  # ET
     transform: Mapped[str] = mapped_column(String(16))  # none | diff | pct_change
     units: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Programmatic public consensus provider ("cleveland_fed" | "gdpnow" | None)
+    consensus_source: Mapped[str | None] = mapped_column(String(24), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -59,7 +62,7 @@ class Release(Base):
     __tablename__ = "releases"
     # One row per (indicator, reference period, provenance). The same period may
     # legitimately appear under several sources (first-print vs latest vintage,
-    # naive vs Bloomberg consensus); analysis filters on is_first_print/source.
+    # naive vs real consensus); analysis filters on is_first_print/source.
     __table_args__ = (
         UniqueConstraint("indicator_id", "ref_period", "source", name="uq_release"),
     )

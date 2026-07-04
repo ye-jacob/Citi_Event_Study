@@ -21,8 +21,18 @@ from sqlalchemy.orm import Session
 from src import config, db
 from src.models import CurvePoint, Release as ReleaseRow
 from src.sources.base import Release
+from src.sources.cleveland_fed import ClevelandFedNowcast
+from src.sources.consensus import ConsensusProvider, ProviderConsensusSource
 from src.sources.fred import VALID_VINTAGES, FredDataSource
+from src.sources.gdpnow import GdpNowNowcast
 from src.sources.naive import NaiveConsensusSource
+
+# Factories for registry-declared public consensus providers. Instantiated
+# lazily and cached per run (each fetch downloads a multi-MB public file).
+PROVIDER_FACTORIES: dict[str, type] = {
+    ClevelandFedNowcast.source_label: ClevelandFedNowcast,
+    GdpNowNowcast.source_label: GdpNowNowcast,
+}
 
 EPILOG = """\
 Why --vintage has no default:
@@ -124,7 +134,9 @@ def main(argv: list[str] | None = None) -> int:
     engine = db.get_engine(args.db)
     db.init_db(engine)
 
-    source = NaiveConsensusSource(FredDataSource(vintage=args.vintage))
+    fred = FredDataSource(vintage=args.vintage)
+    source = NaiveConsensusSource(fred)  # baseline rows, always written
+    providers: dict[str, ConsensusProvider] = {}
     registry = config.indicators_by_key()
     keys = args.indicators or config.active_indicator_keys()
 
@@ -152,6 +164,35 @@ def main(argv: list[str] | None = None) -> int:
                 releases = source.get_releases(key, args.start, end)
                 n = upsert_releases(session, indicator_ids, releases)
                 print(f"{key}: upserted {n} releases (vintage={args.vintage})")
+
+                # Public consensus rows (Cleveland Fed / GDPNow) — written
+                # ALONGSIDE the naive baseline, distinguished by source.
+                label = meta.get("consensus")
+                if not label:
+                    continue
+                try:
+                    provider = providers.get(label)
+                    if provider is None:
+                        provider = PROVIDER_FACTORIES[label]()
+                        providers[label] = provider
+                    if isinstance(provider, GdpNowNowcast):
+                        # GDP rows come wholly from the Atlanta Fed track
+                        # record: ALFRED has no true pre-2014 first prints for
+                        # the SAAR series (see gdpnow.py docstring).
+                        prov_rows = provider.build_releases(
+                            meta["release_time"], args.start, end
+                        )
+                    else:
+                        overlay = ProviderConsensusSource(fred, provider)
+                        prov_rows = overlay.get_releases(key, args.start, end)
+                    n_prov = upsert_releases(session, indicator_ids, prov_rows)
+                    print(f"{key}: upserted {n_prov} releases (consensus={label})")
+                except Exception as exc:  # degrade gracefully; baseline stands
+                    print(
+                        f"{key}: consensus provider {label} failed ({exc}) — "
+                        "naive baseline rows only",
+                        file=sys.stderr,
+                    )
 
     print(f"done -> {args.db or config.DB_PATH}")
     return 0

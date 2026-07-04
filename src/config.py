@@ -57,12 +57,25 @@ CORE_TENORS: list[str] = ["2Y", "5Y", "10Y", "30Y"]
 #   "pct_change"  period-over-period % change          (CPI MoM %)
 VALID_TRANSFORMS = {"none", "diff", "pct_change"}
 
+# Programmatic public consensus providers (see src/sources/):
+#   "cleveland_fed" -> Cleveland Fed inflation nowcast (CPI/PCE MoM, 2013-07+)
+#   "gdpnow"        -> Atlanta Fed GDPNow final pre-release forecast (~2011+)
+# None -> naive baseline only. Manual CSVs (ConsensusCsvSource) are imported
+# ad hoc, not wired through the registry.
+CONSENSUS_PROVIDERS = {"cleveland_fed", "gdpnow"}
+
 # ---------------------------------------------------------------------------
 # Indicator registry (starting points — TODO(human): verify every row before
 # trusting surprises built on it; see the table + gotchas in CLAUDE.md).
 #
 # yield_sign: +1 if a positive surprise generally pushes yields UP (CPI, PCE,
 # NFP, GDP, retail, ISM), -1 if DOWN (unemployment rate, jobless claims).
+#
+# STUDY SCOPE (2026-07, Bloomberg access lost): only indicators with a
+# ToS-clean public consensus source stay active — CPI, PCE, GDP. NFP, UNRATE,
+# RETAIL and CLAIMS are deactivated: their per-release survey consensus exists
+# only behind vendors or scraping-prohibited calendar sites. Revive any of
+# them via ConsensusCsvSource with hand-collected public figures.
 # ---------------------------------------------------------------------------
 INDICATORS: list[dict] = [
     {
@@ -74,6 +87,7 @@ INDICATORS: list[dict] = [
         "release_time": time(14, 0),
         "transform": "none",
         "units": "% (target upper bound)",
+        "consensus": None,
         "active": False,  # TODO(human): the surprise is the UNEXPECTED component
         # vs fed-funds futures (Kuttner), NOT the raw target change. Needs futures
         # data that is not on FRED. Activate only once analytics/surprise.py's
@@ -89,9 +103,10 @@ INDICATORS: list[dict] = [
         "release_time": time(8, 30),
         "transform": "pct_change",
         "units": "% m/m",
+        "consensus": "cleveland_fed",  # model nowcast, daily, cut pre-release
         "active": True,
         "notes": "TODO(human): verify MoM headline is the consensus-quoted number; "
-        "core alternative: CPILFESL. YoY is also quoted.",
+        "core alternative: CPILFESL (Cleveland feed has core too). YoY also quoted.",
     },
     {
         "key": "PCE",
@@ -102,9 +117,10 @@ INDICATORS: list[dict] = [
         "release_time": time(8, 30),
         "transform": "pct_change",
         "units": "% m/m",
+        "consensus": "cleveland_fed",
         "active": True,
         "notes": "TODO(human): core PCEPILFE is the Fed's target — decide which "
-        "series the study uses.",
+        "series the study uses (Cleveland feed has core too).",
     },
     {
         "key": "NFP",
@@ -115,9 +131,11 @@ INDICATORS: list[dict] = [
         "release_time": time(8, 30),
         "transform": "diff",
         "units": "k (change in level)",
-        "active": True,
-        "notes": "Released value is the MoM change in the level. Co-released with "
-        "UNRATE (entangled impacts — CLAUDE.md gotcha).",
+        "consensus": None,
+        "active": False,  # removed from study: no public per-release consensus
+        "notes": "REMOVED 2026-07 (no ToS-clean public consensus archive; "
+        "vendor/scrape only). Revive via ConsensusCsvSource. Released value is "
+        "the MoM change in level; co-released with UNRATE (entangled impacts).",
     },
     {
         "key": "UNRATE",
@@ -128,8 +146,10 @@ INDICATORS: list[dict] = [
         "release_time": time(8, 30),
         "transform": "none",
         "units": "%",
-        "active": True,
-        "notes": "Co-released with NFP — don't attribute the whole move to one.",
+        "consensus": None,
+        "active": False,  # removed from study: no public per-release consensus
+        "notes": "REMOVED 2026-07 (no ToS-clean public consensus archive). "
+        "Revive via ConsensusCsvSource. Co-released with NFP.",
     },
     {
         "key": "RETAIL",
@@ -140,8 +160,10 @@ INDICATORS: list[dict] = [
         "release_time": time(8, 30),
         "transform": "pct_change",
         "units": "% m/m",
-        "active": True,
-        "notes": "TODO(human): verify headline vs ex-auto (RSXFS) against consensus.",
+        "consensus": None,
+        "active": False,  # removed from study: no public per-release consensus
+        "notes": "REMOVED 2026-07 (no ToS-clean public consensus archive). "
+        "Revive via ConsensusCsvSource; ex-auto alt RSXFS.",
     },
     {
         "key": "GDP",
@@ -152,9 +174,13 @@ INDICATORS: list[dict] = [
         "release_time": time(8, 30),
         "transform": "none",  # series is already the published SAAR % change
         "units": "% q/q saar",
+        "consensus": "gdpnow",  # final pre-release GDPNow model forecast
         "active": True,
-        "notes": "First print = advance estimate; 2nd/3rd are revisions. Level "
-        "alternative: GDPC1. TODO(human): verify.",
+        "notes": "Study rows (source=gdpnow_track) come from the Atlanta Fed "
+        "track record: A191RL1Q225SBEA has NO real ALFRED vintages before "
+        "2014-09-26 (fake first prints). Naive-baseline rows before then carry "
+        "that defect — do not use them for surprises. SPF is the free survey "
+        "alternative (staler). TODO(human): verify.",
     },
     {
         "key": "ISM_MFG",
@@ -165,6 +191,7 @@ INDICATORS: list[dict] = [
         "release_time": time(10, 0),
         "transform": "none",
         "units": "index",
+        "consensus": None,
         "active": False,  # ISM licensing — not cleanly on FRED (CLAUDE.md gotcha)
         "notes": "TODO(human): verify sourcing. S&P Global (Markit) PMI is a "
         "DIFFERENT series — do not splice with ISM history.",
@@ -178,6 +205,7 @@ INDICATORS: list[dict] = [
         "release_time": time(10, 0),
         "transform": "none",
         "units": "index",
+        "consensus": None,
         "active": False,
         "notes": "Same licensing situation as ISM_MFG.",
     },
@@ -190,9 +218,10 @@ INDICATORS: list[dict] = [
         "release_time": time(8, 30),
         "transform": "none",
         "units": "persons",
-        "active": True,
-        "notes": "FRED level is persons; consensus is quoted in thousands. "
-        "TODO(human): verify units line up before computing surprises.",
+        "consensus": None,
+        "active": False,  # removed from study: no public per-release consensus
+        "notes": "REMOVED 2026-07 (no ToS-clean public consensus archive). "
+        "Revive via ConsensusCsvSource; mind persons-vs-thousands units.",
     },
 ]
 

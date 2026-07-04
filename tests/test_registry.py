@@ -40,6 +40,27 @@ def test_known_gotchas_stay_inactive_until_human_enables():
     assert by_key["ISM_SRV"]["active"] is False
 
 
+def test_study_scope_is_public_consensus_backed_only():
+    # 2026-07 decision: Bloomberg access lost. Only indicators with a ToS-clean
+    # public consensus source stay in the study; the rest are deactivated
+    # (revivable via ConsensusCsvSource).
+    assert set(config.active_indicator_keys()) == {"CPI", "PCE", "GDP"}
+    by_key = config.indicators_by_key()
+    for key in ("NFP", "UNRATE", "RETAIL", "CLAIMS"):
+        assert by_key[key]["active"] is False
+        assert "REMOVED" in by_key[key]["notes"]
+
+
+def test_consensus_fields_are_valid():
+    for row in config.INDICATORS:
+        assert "consensus" in row, row["key"]
+        assert row["consensus"] in config.CONSENSUS_PROVIDERS | {None}, row["key"]
+    by_key = config.indicators_by_key()
+    assert by_key["CPI"]["consensus"] == "cleveland_fed"
+    assert by_key["PCE"]["consensus"] == "cleveland_fed"
+    assert by_key["GDP"]["consensus"] == "gdpnow"
+
+
 def test_core_tenors_have_fred_series():
     for tenor in config.CORE_TENORS:
         assert tenor in config.TENOR_FRED_SERIES

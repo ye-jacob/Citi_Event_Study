@@ -30,11 +30,14 @@
 
 ### Data and vintages
 <!-- TODO(human): first-print policy (ALFRED), why revised data corrupts surprises,
-     consensus source (Bloomberg export vs naive proxy) per indicator. -->
+     the series-inception trap and the GDP track-record fix, consensus sources
+     per indicator (Cleveland Fed nowcast / GDPNow / naive proxy) and the
+     model-nowcast-vs-survey-median caveat. -->
 
 ### Surprise construction
-<!-- TODO(human): raw vs standardized surprise; dispersion source and fallback;
-     per-indicator yield_sign; the futures-based FOMC surprise. -->
+<!-- TODO(human): raw vs standardized surprise; dispersion unavailable from public
+     sources -> historical-stdev fallback choice; per-indicator yield_sign; the
+     futures-based FOMC surprise. -->
 
 ### Event window and curve decomposition
 <!-- TODO(human): window definition (daily H.15 close-to-close constraint),

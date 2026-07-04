@@ -1,23 +1,25 @@
-"""Offline Bloomberg consensus importer.
+"""Generic offline consensus importer (manual CSV).
 
-The human produces a one-time CSV export from a terminal (``ECO <GO>`` + the
-Excel add-in / ``=BDH()``) — the app NEVER calls Bloomberg live. This module
-only parses that export into normalized Release rows.
+The universal fallback when no programmatic public source exists: consensus
+figures hand-collected from publicly displayed sources (news wire recaps,
+calendar pages, SPF tables) into a CSV, imported offline. This replaces the
+former Bloomberg importer — same contract, vendor-neutral.
 
 Expected CSV header (one row per release)::
 
     indicator,ref_period,release_datetime,actual,consensus,consensus_stdev,n_estimates,previous
 
-- ``indicator``       registry key ("CPI", ...) — or a Bloomberg ECO ticker if a
-                      ``ticker_map`` {ticker: key} is supplied.
-- ``ref_period``      YYYY-MM-DD (period the data describes)
-- ``release_datetime``YYYY-MM-DD HH:MM, assumed ET
-- ``actual``          the as-released (first) print as shown on ECO
-- ``consensus``       survey median; ``consensus_stdev``/``n_estimates`` optional
-- ``previous``        prior value as shown at release time
+- ``indicator``        registry key ("CPI", "NFP", ...)
+- ``ref_period``       YYYY-MM-DD (period the data describes)
+- ``release_datetime`` YYYY-MM-DD HH:MM, assumed ET
+- ``actual``           the as-released (first) print
+- ``consensus``        survey median / published expectation;
+                       ``consensus_stdev`` / ``n_estimates`` / ``previous`` optional
 
-LICENSING: Bloomberg-derived data must not be committed to a public repo. Keep
-exports under data/bloomberg/ (gitignored).
+Keep provenance honest: pass a ``source_label`` naming where the numbers came
+from (e.g. "csv_reuters_recaps"); it lands in releases.source. If the data's
+license does not allow committing it, keep the file under data/private/
+(gitignored).
 """
 
 from __future__ import annotations
@@ -39,17 +41,17 @@ REQUIRED_COLUMNS = [
 OPTIONAL_COLUMNS = ["consensus_stdev", "n_estimates", "previous"]
 
 
-class BloombergCsvSource(DataSource):
+class ConsensusCsvSource(DataSource):
     def __init__(
-        self, csv_path: str | Path, ticker_map: dict[str, str] | None = None
+        self,
+        csv_path: str | Path,
+        source_label: str = "manual_csv",
+        is_first_print: bool = True,
     ) -> None:
         self._path = Path(csv_path)
+        self._source_label = source_label
+        self._is_first_print = is_first_print
         df = pd.read_csv(self._path)
-        if ticker_map and "ticker" in df.columns and "indicator" not in df.columns:
-            df["indicator"] = df["ticker"].map(ticker_map)
-            if df["indicator"].isna().any():
-                missing = sorted(df.loc[df["indicator"].isna(), "ticker"].unique())
-                raise ValueError(f"ticker_map is missing entries for: {missing}")
         missing_cols = [c for c in REQUIRED_COLUMNS if c not in df.columns]
         if missing_cols:
             raise ValueError(
@@ -84,16 +86,16 @@ class BloombergCsvSource(DataSource):
                     consensus_stdev=_opt_float(row.consensus_stdev),
                     n_estimates=_opt_int(row.n_estimates),
                     previous=_opt_float(row.previous),
-                    # ECO shows the as-released print, i.e. the first print.
-                    is_first_print=True,
-                    source="bloomberg_csv",
+                    is_first_print=self._is_first_print,
+                    source=self._source_label,
                 )
             )
         return releases
 
     def get_curve(self, start: date, end: date) -> pd.DataFrame:
         raise NotImplementedError(
-            "The Treasury curve comes from FRED (FredDataSource), not Bloomberg."
+            "The Treasury curve comes from FRED (FredDataSource), not a "
+            "consensus CSV."
         )
 
 

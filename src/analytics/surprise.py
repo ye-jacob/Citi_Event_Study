@@ -70,7 +70,7 @@ def fomc_surprise(meetings: pd.DataFrame, futures: pd.DataFrame) -> pd.Series:
       and unscheduled-meeting handling. Needs CME FF futures (not on FRED).
     - OIS-based: change in the meeting-dated OIS rate — cleaner post-2008 but a
       different data acquisition problem.
-    - Bloomberg WIRP-style implied probabilities, exported alongside ECO data.
+    - CME FedWatch-style implied probabilities (public page, no clean history).
 
     The FOMC indicator stays active=False in the registry until this exists.
     """
