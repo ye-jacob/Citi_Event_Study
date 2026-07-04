@@ -1,0 +1,52 @@
+# Scheduled ingest: pulls FRED/ALFRED data and commits the refreshed SQLite DB.
+# The Action is the backend; the Streamlit app only reads committed data
+# (CLAUDE.md "Deployment"). Requires a FRED_API_KEY repo secret.
+name: ingest
+
+on:
+  workflow_dispatch:
+    inputs:
+      vintage:
+        description: >-
+          Which value counts as "the actual" — the human-owned vintage decision
+          (CLAUDE.md gotcha #1). No default on purpose.
+        required: true
+        type: choice
+        options: [first, latest]
+  # TODO(human): once the vintage policy is decided, enable the cron and
+  # hard-code the chosen --vintage in the run step below.
+  # schedule:
+  #   - cron: "0 14 * * 1-5"  # 14:00 UTC — after 08:30 ET releases year-round
+
+permissions:
+  contents: write
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Run ingest
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python -m src.ingest.run_ingest --vintage "${{ inputs.vintage }}"
+
+      - name: Commit refreshed data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "chore: refresh data (vintage=${{ inputs.vintage }}) [skip ci]"
+            git push
+          fi

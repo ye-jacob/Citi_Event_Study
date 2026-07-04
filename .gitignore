@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Secrets / env
+.env
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Bloomberg-sourced data must never land in a public repo (licensing).
+# Keep every Bloomberg export under data/bloomberg/ so this rule catches it.
+data/bloomberg/
+*.bloomberg.csv
+
+# Local scratch DBs (the canonical committed DB is data/event_study.db)
+data/*.tmp.db
