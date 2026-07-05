@@ -39,6 +39,7 @@ def get_fred_api_key() -> str:
 # Treasury constant-maturity series (H.15). Percent, daily close, NaN on holidays.
 TENOR_FRED_SERIES: dict[str, str] = {
     "3M": "DGS3MO",
+    "6M": "DGS6MO",
     "1Y": "DGS1",
     "2Y": "DGS2",
     "5Y": "DGS5",
@@ -50,6 +51,11 @@ TENOR_FRED_SERIES: dict[str, str] = {
 
 # The tenors the level/slope/curvature decomposition needs.
 CORE_TENORS: list[str] = ["2Y", "5Y", "10Y", "30Y"]
+
+# What the ingest actually pulls: the decomposition tenors plus the front end
+# (bills/1Y) for money-market-adjacent exploration. Extra tenors never change
+# the analytics — the factors are defined on CORE_TENORS only.
+CURVE_TENORS: list[str] = ["3M", "6M", "1Y"] + CORE_TENORS
 
 # How to turn the raw FRED series into the number the market quotes vs consensus:
 #   "none"        use the published value as-is        (UNRATE %, GDP SAAR %, ICSA)

@@ -141,6 +141,34 @@ and their release dates come from the Atlanta Fed's GDPNow track record,
 because the SAAR series on FRED has no true vintages before September 2014.
 The curve is Fed H.15 constant-maturity closes (2Y, 5Y, 10Y, 30Y).
 
+Summary statistics for the estimation variables (curve factors are daily
+changes over the full curve sample; releases and nowcasts cover the study
+samples):
+
+| Variable | Range | N | Mean | Median | Std dev | Min | Max |
+|---|---|---|---|---|---|---|---|
+| Δ level (10Y), bps | 2000-01 to 2026-07 | 6,626 | −0.03 | 0.00 | 5.79 | −51.0 | +29.0 |
+| Δ 2s10s, bps | 2000-01 to 2026-07 | 6,626 | 0.00 | 0.00 | 3.90 | −28.0 | +42.0 |
+| Δ 5s30s, bps | 2000-01 to 2026-07 | 6,626 | +0.01 | 0.00 | 3.84 | −24.0 | +34.0 |
+| Δ curvature, bps | 2000-01 to 2026-07 | 6,626 | −0.01 | 0.00 | 4.15 | −53.0 | +28.0 |
+| CPI actual, % m/m | 2013-08 to 2026-05 | 153 | 0.23 | 0.21 | 0.29 | −0.80 | +1.32 |
+| CPI nowcast, % m/m | 2013-08 to 2026-05 | 153 | 0.22 | 0.22 | 0.25 | −0.69 | +1.11 |
+| CPI surprise, pp | 2013-08 to 2026-05 | 153 | +0.01 | +0.01 | 0.15 | −0.37 | +0.68 |
+| PCE actual, % m/m | 2013-07 to 2026-05 | 155 | 0.19 | 0.17 | 0.21 | −0.47 | +0.95 |
+| PCE nowcast, % m/m | 2013-07 to 2026-05 | 155 | 0.20 | 0.18 | 0.20 | −0.51 | +0.94 |
+| PCE surprise, pp | 2013-07 to 2026-05 | 155 | −0.00 | −0.01 | 0.07 | −0.21 | +0.20 |
+| GDP actual, % q/q saar | 2011-07 to 2026-01 | 59 | 2.19 | 2.41 | 6.41 | −32.90 | +33.08 |
+| GDP nowcast, % q/q saar | 2011-07 to 2026-01 | 59 | 2.36 | 2.43 | 6.69 | −32.08 | +36.97 |
+| GDP surprise, pp | 2011-07 to 2026-01 | 59 | −0.18 | +0.04 | 1.16 | −3.89 | +2.46 |
+
+Three things to read off the table. The surprise standard deviations (0.15pp
+CPI, 0.07pp PCE, 1.16pp GDP) are the "one sigma" units every beta in this
+paper is quoted in. Mean surprises sit near zero, so the nowcasts are close
+to unbiased in these samples. The GDP extremes (−32.9, +33.1) are the 2020
+COVID quarters, which the nowcast tracked (−32.1, +37.0); they are real
+observations, not errors, and the robust standard errors are partly about
+them.
+
 ### Surprise construction
 
 The raw surprise is actual minus expectation. The standardized surprise

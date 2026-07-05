@@ -113,10 +113,18 @@ cells = market holidays.
 | Column | Series | Source |
 |---|---|---|
 | `date` | Observation date | — |
+| `3M` | [DGS3MO](https://fred.stlouisfed.org/series/DGS3MO) | FRED mirror of Fed H.15 |
+| `6M` | [DGS6MO](https://fred.stlouisfed.org/series/DGS6MO) | FRED mirror of Fed H.15 |
+| `1Y` | [DGS1](https://fred.stlouisfed.org/series/DGS1) | FRED mirror of Fed H.15 |
 | `2Y` | [DGS2](https://fred.stlouisfed.org/series/DGS2) | FRED mirror of Fed H.15 |
 | `5Y` | [DGS5](https://fred.stlouisfed.org/series/DGS5) | FRED mirror of Fed H.15 |
 | `10Y` | [DGS10](https://fred.stlouisfed.org/series/DGS10) | FRED mirror of Fed H.15 |
 | `30Y` | [DGS30](https://fred.stlouisfed.org/series/DGS30) | FRED mirror of Fed H.15 |
+
+The bill tenors (3M, 6M) are H.15 constant-maturity yields on a
+bond-equivalent basis, same family as the coupon tenors. The curve *factors*
+in the analysis are defined on 2Y/5Y/10Y/30Y only; the front end is provided
+for exploration and does not enter any regression.
 
 Ultimate source: Federal Reserve **H.15 Selected Interest Rates**
 (<https://www.federalreserve.gov/releases/h15/>), Treasury constant maturities,

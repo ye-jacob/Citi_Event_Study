@@ -64,3 +64,10 @@ def test_consensus_fields_are_valid():
 def test_core_tenors_have_fred_series():
     for tenor in config.CORE_TENORS:
         assert tenor in config.TENOR_FRED_SERIES
+
+
+def test_ingested_tenors_are_mapped_and_include_front_end():
+    for tenor in config.CURVE_TENORS:
+        assert tenor in config.TENOR_FRED_SERIES
+    assert {"3M", "6M", "1Y"} <= set(config.CURVE_TENORS)
+    assert set(config.CORE_TENORS) <= set(config.CURVE_TENORS)

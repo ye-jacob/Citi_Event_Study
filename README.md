@@ -43,7 +43,7 @@ heteroskedasticity-robust standard errors (HC1).
 | Consensus — CPI, PCE | [Cleveland Fed inflation nowcast](https://www.clevelandfed.org/indicators-and-data/inflation-nowcasting), last value strictly before each release (2013-07 →) |
 | Consensus — GDP | [Atlanta Fed GDPNow](https://www.atlantafed.org/cqer/research/gdpnow), final pre-release forecast (2011Q3 →) |
 | Consensus — baseline | Naive proxy: expectation = previous as-reported print |
-| Treasury curve | FRED `DGS2/5/10/30` (Fed [H.15](https://www.federalreserve.gov/releases/h15/) daily closes, 2000 →) |
+| Treasury curve | FRED `DGS3MO/6MO/1/2/5/10/30` (Fed [H.15](https://www.federalreserve.gov/releases/h15/) daily closes, 2000 →); factors use 2Y/5Y/10Y/30Y, the front end is for exploration |
 
 Vintage rigor, verified against published prints:
 

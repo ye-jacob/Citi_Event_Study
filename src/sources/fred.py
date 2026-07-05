@@ -76,7 +76,7 @@ class FredDataSource(DataSource):
     def get_curve(
         self, start: date, end: date, tenors: list[str] | None = None
     ) -> pd.DataFrame:
-        tenors = tenors or config.CORE_TENORS
+        tenors = tenors or config.CURVE_TENORS
         unknown = set(tenors) - set(config.TENOR_FRED_SERIES)
         if unknown:
             raise ValueError(f"Unknown tenors {sorted(unknown)}")
