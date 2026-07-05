@@ -39,6 +39,11 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python -m src.ingest.run_ingest --vintage "${{ inputs.vintage }}"
 
+      - name: Recompute analysis + audit exports
+        run: |
+          python -m src.analytics.run_analysis
+          python -m src.ingest.export_csv
+
       - name: Commit refreshed data
         run: |
           git config user.name "github-actions[bot]"

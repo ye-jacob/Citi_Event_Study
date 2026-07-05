@@ -1,84 +1,207 @@
-"""Event study core — HUMAN-OWNED (CLAUDE.md "Human owns").
+"""Event-study econometrics.
 
-Everything here is a stub on purpose: the event-window definition, the curve
-decomposition choice, regime classification, and the regression spec are the
-analytical judgments this project exists to demonstrate. Claude Code provides
-the surrounding plumbing (curve math in analytics/curve.py, EventImpact schema,
-data access) and stops.
+Specification: the author's Methodology (2026-07-04), Sections 3.1-3.4,
+implemented mechanically. All regressions are per indicator x curve factor,
+never pooled, with White heteroskedasticity-robust standard errors (HC1
+finite-sample variant). Curve factors are in percentage points upstream;
+everything here reports BASIS POINTS per one standard deviation of surprise.
 
---------------------------------------------------------------------------
-Decision notes (options + tradeoffs; the human picks)
---------------------------------------------------------------------------
+3.1 Baseline      dF(d) = a + b*S(d) + e            -> fit_baseline
+3.2 Asymmetry     dF(d) = a + b+*S+ + b-*S- + e     -> fit_asymmetric
+3.3 Nowcast/naive baseline under both expectation measures (same fit_baseline;
+    the surprise table carries both, matched samples)
+3.4 Event study   CARs around top/bottom-decile surprises vs the mean
+    release-day change on control (non-extreme) releases -> event_study_cars
 
-EVENT WINDOW — free H.15 data is DAILY CLOSE, so with 08:30 ET releases:
-  (a) close(t-1) -> close(t): tightest free window; the release is inside it,
-      but so is everything else that day (label e.g. "tm1c_t0c").
-  (b) close(t-1) -> close(t+1): catches slow digestion, doubles contamination.
-  (c) Intraday futures around the timestamp: the clean answer, not free —
-      candidate future work. ISM at 10:00 and FOMC at 14:00 still sit inside
-      the daily window; only the label/interpretation changes.
-  Also decide holiday alignment: "previous close" = previous TRADING day
-  (curve.change_between refuses to guess).
-
-CO-RELEASES — NFP + UNRATE share one 08:30 timestamp; their impacts are
-  entangled. Options: joint regression, headline-only attribution, or dropping
-  the smaller signal. Don't double-count one move in two single-indicator betas.
-
-REGIME — hiking / cutting / hold. Options: direction of the last target change
-  within N months (DFEDTARU diff), or market-implied. Boundary meetings (first
-  cut after a hiking cycle) dominate the interesting variation — rule matters.
-
-REGRESSION — delta_shape ~ beta * z_surprise per indicator:
-  OLS with HAC (Newey-West) vs plain; regime split vs interaction term; pooled
-  multi-indicator with yield_sign applied vs per-indicator. Small samples:
-  report n and CIs for every beta (limitations section promise).
+Window: dF(d) = F(d) - F(d-1) in trading days. A release date that is not a
+trading day maps to the first close on/after it; the pre date is the last
+close strictly before it. Rows whose window straddles more than ``max_gap``
+calendar days on either side are dropped (long holiday gaps).
 """
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
+import statsmodels.api as sm
+
+from src.analytics.curve import SHAPE_MEASURES, shape_measures, to_bps
+
+FACTORS = list(SHAPE_MEASURES)  # level, slope_2s10s, slope_5s30s, curvature
+COV_TYPE = "HC1"  # White (1980) heteroskedasticity-robust, finite-sample variant
 
 
-def classify_regime(curve_or_policy: pd.DataFrame) -> pd.Series:
-    """Label each date hiking / cutting / hold.
-
-    Returns a date-indexed Series of {"hiking", "cutting", "hold"}.
-    """
-    raise NotImplementedError(
-        "TODO(human): regime rule is an analytical choice — see module "
-        "docstring (last-move direction vs market-implied, lookback length)."
-    )
+# ------------------------------------------------------------- observations
 
 
-def compute_event_impacts(
-    releases: pd.DataFrame, curve: pd.DataFrame, window_label: str
+def release_day_changes(
+    surprises: pd.DataFrame, curve: pd.DataFrame, max_gap: int = 5
 ) -> pd.DataFrame:
-    """Per release: pre/post yields + level/slope/curvature deltas (bps).
+    """Attach the release-window factor changes (bps) to each surprise row.
 
-    Should return rows matching the event_impacts schema (models.EventImpact),
-    using analytics.curve.change_between once the window policy picks the
-    pre/post dates for each release_datetime.
+    ``surprises`` is standardized_surprises() output; ``curve`` is the tenor
+    frame (percent). Output adds one delta_<factor> column per shape measure.
     """
-    raise NotImplementedError(
-        "TODO(human): the window definition is human-owned — options (a)/(b)/(c) "
-        "in the module docstring. Plumbing ready: curve.change_between + "
-        "models.EventImpact."
-    )
+    measures = shape_measures(curve).dropna()
+    idx = measures.index
+
+    dates = pd.to_datetime(surprises["release_datetime"]).dt.normalize()
+    windows: dict[pd.Timestamp, pd.Series | None] = {}
+    for d in dates.unique():
+        pos = idx.searchsorted(d)
+        if pos <= 0 or pos >= len(idx):
+            windows[d] = None
+            continue
+        d1, d0 = idx[pos], idx[pos - 1]
+        if (d1 - d).days > max_gap or (d - d0).days > max_gap:
+            windows[d] = None
+            continue
+        windows[d] = to_bps(measures.loc[d1] - measures.loc[d0])
+
+    out = surprises.copy()
+    out["release_date"] = dates
+    for factor in FACTORS:
+        out[f"delta_{factor}"] = [
+            None if windows[d] is None else float(windows[d][factor])
+            for d in dates
+        ]
+    n_before = len(out)
+    out = out.dropna(subset=[f"delta_{f}" for f in FACTORS]).reset_index(drop=True)
+    out.attrs["dropped_no_window"] = n_before - len(out)
+    return out
 
 
-def estimate_surprise_betas(
-    impacts: pd.DataFrame,
-    surprises: pd.DataFrame,
-    by_regime: bool = False,
+# -------------------------------------------------------------- estimation
+
+
+def _ols(y: pd.Series, X: pd.DataFrame):
+    return sm.OLS(y.astype(float), X.astype(float)).fit(cov_type=COV_TYPE)
+
+
+def fit_baseline(obs: pd.DataFrame) -> pd.DataFrame:
+    """Methodology 3.1/3.3: dF = a + b*S per (indicator, expectation, factor)."""
+    rows = []
+    for (indicator, expectation), g in obs.groupby(["indicator", "expectation"]):
+        X = pd.DataFrame({"const": 1.0, "surprise": g["surprise_z"]})
+        for factor in FACTORS:
+            res = _ols(g[f"delta_{factor}"], X)
+            ci = res.conf_int().loc["surprise"]
+            rows.append(
+                {
+                    "indicator": indicator,
+                    "expectation": expectation,
+                    "factor": factor,
+                    "n": int(res.nobs),
+                    "beta": res.params["surprise"],
+                    "se": res.bse["surprise"],
+                    "t": res.tvalues["surprise"],
+                    "p": res.pvalues["surprise"],
+                    "ci_low": ci[0],
+                    "ci_high": ci[1],
+                    "alpha": res.params["const"],
+                    "r2": res.rsquared,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def fit_asymmetric(obs: pd.DataFrame, expectation: str = "nowcast") -> pd.DataFrame:
+    """Methodology 3.2: dF = a + b+*max(S,0) + b-*min(S,0), per indicator x factor.
+
+    ``p_equal`` is the robust Wald p-value of H0: b+ = b-.
+    """
+    rows = []
+    sample = obs[obs["expectation"] == expectation]
+    for indicator, g in sample.groupby("indicator"):
+        X = pd.DataFrame(
+            {
+                "const": 1.0,
+                "s_pos": g["surprise_z"].clip(lower=0.0),
+                "s_neg": g["surprise_z"].clip(upper=0.0),
+            }
+        )
+        for factor in FACTORS:
+            res = _ols(g[f"delta_{factor}"], X)
+            ci = res.conf_int()
+            rows.append(
+                {
+                    "indicator": indicator,
+                    "expectation": expectation,
+                    "factor": factor,
+                    "n": int(res.nobs),
+                    "beta_pos": res.params["s_pos"],
+                    "se_pos": res.bse["s_pos"],
+                    "ci_pos_low": ci.loc["s_pos", 0],
+                    "ci_pos_high": ci.loc["s_pos", 1],
+                    "beta_neg": res.params["s_neg"],
+                    "se_neg": res.bse["s_neg"],
+                    "ci_neg_low": ci.loc["s_neg", 0],
+                    "ci_neg_high": ci.loc["s_neg", 1],
+                    "p_equal": float(res.f_test("s_pos = s_neg").pvalue),
+                    "r2": res.rsquared,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def event_study_cars(
+    obs: pd.DataFrame,
+    curve: pd.DataFrame,
+    expectation: str = "nowcast",
+    pre: int = 5,
+    post: int = 10,
+    decile: float = 0.10,
 ) -> pd.DataFrame:
-    """Surprise betas: OLS of curve-shape change on standardized surprise.
+    """Methodology 3.4: mean CAR paths around extreme-surprise releases.
 
-    Expected output shape (feeds charts.fig_beta_bars and the writeup):
-    one row per (indicator, shape_measure[, regime]) with beta, stderr, ci_low,
-    ci_high, n_obs.
+    Surprise days: top/bottom ``decile`` of surprise_z per indicator ("hot" /
+    "cold"). Control days: the remaining releases; the benchmark is their mean
+    release-day change per factor. Abnormal change on each relative trading
+    day tau in [-pre, +post] is the realized daily change minus that constant;
+    CARs cumulate from tau=-pre. Events too close to the sample edge for the
+    full window are dropped (n_events reports what remains).
     """
-    raise NotImplementedError(
-        "TODO(human): the regression specification and its interpretation are "
-        "human-owned — see module docstring (HAC errors, regime interaction, "
-        "co-release handling)."
-    )
+    measures = shape_measures(curve).dropna()
+    daily = to_bps(measures.diff()).dropna()
+    idx = daily.index
+
+    sample = obs[obs["expectation"] == expectation]
+    rows = []
+    for indicator, g in sample.groupby("indicator"):
+        hi = g["surprise_z"].quantile(1.0 - decile)
+        lo = g["surprise_z"].quantile(decile)
+        groups = {
+            "hot": g[g["surprise_z"] >= hi],
+            "cold": g[g["surprise_z"] <= lo],
+        }
+        control = g[(g["surprise_z"] > lo) & (g["surprise_z"] < hi)]
+        control_mean = {f: control[f"delta_{f}"].mean() for f in FACTORS}
+
+        for group_name, events in groups.items():
+            paths: dict[str, list[np.ndarray]] = {f: [] for f in FACTORS}
+            for d in pd.to_datetime(events["release_date"]):
+                pos = idx.searchsorted(d)  # day 0: first close on/after release
+                if pos - pre < 0 or pos + post >= len(idx):
+                    continue
+                window = daily.iloc[pos - pre : pos + post + 1]
+                for f in FACTORS:
+                    paths[f].append(window[f].to_numpy() - control_mean[f])
+            n_events = len(paths[FACTORS[0]])
+            if n_events == 0:
+                continue
+            taus = np.arange(-pre, post + 1)
+            for f in FACTORS:
+                car = np.cumsum(np.mean(paths[f], axis=0))
+                for tau, value in zip(taus, car):
+                    rows.append(
+                        {
+                            "indicator": indicator,
+                            "expectation": expectation,
+                            "factor": f,
+                            "group": group_name,
+                            "tau": int(tau),
+                            "car": float(value),
+                            "n_events": n_events,
+                        }
+                    )
+    return pd.DataFrame(rows)

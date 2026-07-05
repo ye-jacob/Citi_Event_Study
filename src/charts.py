@@ -56,7 +56,10 @@ MEASURE_COLORS = {
     "slope_5s30s": _SLOTS[2],
     "curvature": _SLOTS[4],
 }
-REGIME_COLORS = {"hiking": _SLOTS[5], "cutting": _SLOTS[0], "hold": _SLOTS[2]}
+# Polarity pairs use the diverging convention (warm = hot/upside, cool = cold/
+# downside); the expectation measures are two entities with fixed slots.
+SIGN_COLORS = {"hot": _SLOTS[5], "cold": _SLOTS[0], "positive": _SLOTS[5], "negative": _SLOTS[0]}
+EXPECTATION_COLORS = {"nowcast": _SLOTS[0], "naive": _SLOTS[4]}
 
 FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
 ACCENT = _SLOTS[0]
@@ -185,55 +188,102 @@ def fig_surprise_scatter(
 
 def fig_beta_bars(
     betas: pd.DataFrame,
-    label_col: str = "indicator",
+    label_col: str = "factor",
     beta_col: str = "beta",
-    ci_low_col: str = "ci_low",
-    ci_high_col: str = "ci_high",
-    regime_col: str | None = None,
+    ci_low_col: str | None = "ci_low",
+    ci_high_col: str | None = "ci_high",
+    group_col: str | None = None,
+    color_map: dict[str, str] | None = None,
     title: str | None = None,
     x_title: str = "bps per 1σ surprise",
 ) -> go.Figure:
-    """Horizontal beta bars with CI whiskers (feeds the findings charts).
+    """Horizontal bars with optional CI whiskers and optional grouping.
 
-    Expects the human-produced output of estimate_surprise_betas: one row per
-    label (optionally x regime) with beta and CI bounds. Bars grow from a zero
-    baseline; grouped + legended when a regime column is given.
+    One bar per label row; when ``group_col`` is given, one trace per group
+    (colored via ``color_map``, legended). CI columns may be None for
+    whisker-less bars (e.g. an R² comparison).
     """
     fig = go.Figure()
+    has_ci = bool(
+        ci_low_col and ci_high_col
+        and ci_low_col in betas.columns and ci_high_col in betas.columns
+    )
 
     def _bar(rows: pd.DataFrame, name: str | None, color: str, show: bool) -> None:
+        error_x = None
+        if has_ci:
+            error_x = dict(
+                type="data",
+                array=rows[ci_high_col] - rows[beta_col],
+                arrayminus=rows[beta_col] - rows[ci_low_col],
+                color=INK_SECONDARY,
+                thickness=2,
+                width=4,
+            )
         fig.add_trace(
             go.Bar(
                 y=rows[label_col],
                 x=rows[beta_col],
-                name=name or "beta",
+                name=name or beta_col,
                 orientation="h",
                 marker=dict(color=color, cornerradius=4),
                 showlegend=show,
-                error_x=dict(
-                    type="data",
-                    array=rows[ci_high_col] - rows[beta_col],
-                    arrayminus=rows[beta_col] - rows[ci_low_col],
-                    color=INK_SECONDARY,
-                    thickness=2,
-                    width=4,
-                ),
+                error_x=error_x,
                 hovertemplate=(
-                    "%{y}: %{x:.1f} " + x_title + "<extra>" + (name or "") + "</extra>"
+                    "%{y}: %{x:.2f} " + x_title + "<extra>" + (name or "") + "</extra>"
                 ),
             )
         )
 
-    if regime_col and regime_col in betas.columns:
-        for regime, rows in betas.groupby(regime_col, sort=False):
-            _bar(rows, str(regime), REGIME_COLORS.get(str(regime), INK_MUTED), True)
+    if group_col and group_col in betas.columns:
+        colors = color_map or {}
+        for group, rows in betas.groupby(group_col, sort=False):
+            _bar(rows, str(group), colors.get(str(group), INK_MUTED), True)
         fig.update_layout(barmode="group")
     else:
         _bar(betas, None, ACCENT, False)
 
-    show_legend = bool(regime_col and regime_col in betas.columns)
+    show_legend = bool(group_col and group_col in betas.columns)
     _base_layout(fig, title=title, show_legend=show_legend)
     fig.update_layout(bargap=0.45)
     fig.update_xaxes(title_text=x_title, zeroline=True, zerolinecolor=BASELINE, zerolinewidth=1)
     fig.update_yaxes(showgrid=False)
+    return fig
+
+
+def fig_car_lines(
+    cars: pd.DataFrame,
+    tau_col: str = "tau",
+    car_col: str = "car",
+    group_col: str = "group",
+    color_map: dict[str, str] | None = None,
+    title: str | None = None,
+    y_title: str = "Cumulative abnormal change (bps)",
+) -> go.Figure:
+    """Event-study CAR paths: one 2px line per group, day-0 marked.
+
+    Expects one (indicator, factor) slice of the analysis_event_study table.
+    """
+    colors = color_map or SIGN_COLORS
+    fig = go.Figure()
+    for group, rows in cars.groupby(group_col, sort=False):
+        rows = rows.sort_values(tau_col)
+        n = int(rows["n_events"].iloc[0]) if "n_events" in rows.columns else None
+        name = f"{group} (n={n})" if n is not None else str(group)
+        fig.add_trace(
+            go.Scatter(
+                x=rows[tau_col],
+                y=rows[car_col],
+                name=name,
+                mode="lines",
+                line=dict(color=colors.get(str(group), INK_MUTED), width=2),
+                hovertemplate="τ=%{x}: %{y:.1f} bps<extra>" + str(group) + "</extra>",
+            )
+        )
+    _base_layout(fig, title=title, show_legend=True)
+    fig.add_vline(x=0, line_width=1, line_color=BASELINE)
+    fig.update_xaxes(title_text="Trading days relative to release")
+    fig.update_yaxes(
+        title_text=y_title, zeroline=True, zerolinecolor=BASELINE, zerolinewidth=1
+    )
     return fig

@@ -44,18 +44,48 @@ def test_surprise_scatter_with_fit():
     assert len(fig.data) == 2
 
 
-def test_beta_bars_with_cis_and_regimes():
+def test_beta_bars_grouped_with_cis():
     betas = pd.DataFrame(
         {
-            "indicator": ["CPI", "NFP", "CPI", "NFP"],
-            "beta": [-4.0, -2.5, -1.5, -1.0],
-            "ci_low": [-6.0, -4.0, -3.0, -2.2],
-            "ci_high": [-2.0, -1.0, 0.0, 0.2],
-            "regime": ["hiking", "hiking", "hold", "hold"],
+            "factor": ["level", "slope_2s10s", "level", "slope_2s10s"],
+            "beta": [4.0, -2.5, 1.5, -1.0],
+            "ci_low": [2.0, -4.0, 0.0, -2.2],
+            "ci_high": [6.0, -1.0, 3.0, 0.2],
+            "side": ["positive", "positive", "negative", "negative"],
         }
     )
-    fig = charts.fig_beta_bars(betas, regime_col="regime")
-    assert len(fig.data) == 2  # one trace per regime
+    fig = charts.fig_beta_bars(
+        betas, group_col="side", color_map=charts.SIGN_COLORS
+    )
+    assert len(fig.data) == 2  # one trace per group
     assert fig.layout.showlegend is True
-    fig_single = charts.fig_beta_bars(betas[betas.regime == "hiking"])
+    assert fig.data[0].marker.color == charts.SIGN_COLORS["positive"]
+    fig_single = charts.fig_beta_bars(betas[betas.side == "positive"])
     assert fig_single.layout.showlegend is False
+
+
+def test_beta_bars_without_cis():
+    df = pd.DataFrame(
+        {"factor": ["level", "curvature"], "beta": [0.3, 0.1],
+         "expectation": ["nowcast", "nowcast"]}
+    )
+    fig = charts.fig_beta_bars(
+        df, ci_low_col=None, ci_high_col=None,
+        group_col="expectation", color_map=charts.EXPECTATION_COLORS,
+    )
+    assert fig.data[0].error_x.array is None
+
+
+def test_car_lines():
+    cars = pd.DataFrame(
+        {
+            "tau": [-1, 0, 1, -1, 0, 1],
+            "car": [0.0, 3.0, 3.5, 0.0, -2.0, -2.5],
+            "group": ["hot", "hot", "hot", "cold", "cold", "cold"],
+            "n_events": [15, 15, 15, 14, 14, 14],
+        }
+    )
+    fig = charts.fig_car_lines(cars)
+    assert len(fig.data) == 2
+    assert "n=15" in fig.data[0].name
+    assert fig.data[0].line.color == charts.SIGN_COLORS["hot"]
