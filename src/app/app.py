@@ -218,6 +218,60 @@ with tab_results:
                 "control (non-extreme) releases; cumulated from τ=−5."
             )
 
+        # --- era conditioning -------------------------------------------------
+        if "analysis_era" in table_names():
+            eras = load_table("analysis_era")
+            e = eras[eras.indicator == indicator].assign(
+                factor_label=lambda d: d["factor"].map(FACTOR_LABELS)
+            )
+            if not e.empty:
+                st.subheader("When the print matters: pre- vs post-2021 betas")
+                st.plotly_chart(
+                    charts.fig_beta_bars(
+                        e, label_col="factor_label",
+                        group_col="era", color_map=charts.ERA_COLORS,
+                    ),
+                    use_container_width=True, theme=None,
+                )
+                st.dataframe(
+                    e[["era", "factor", "n", "beta", "se", "p", "r2"]].round(3),
+                    use_container_width=True, hide_index=True,
+                )
+
+        # --- event-day vol premium ---------------------------------------------
+        if "analysis_event_vol" in table_names():
+            vol = load_table("analysis_event_vol")
+            v = vol[vol.indicator == indicator]
+            if not v.empty:
+                st.subheader("Are release days high-vol days?")
+                st.dataframe(
+                    v[["window", "factor", "n_event", "sd_event", "sd_control",
+                       "vol_ratio", "mean_abs_event", "mean_abs_control"]].round(2),
+                    use_container_width=True, hide_index=True,
+                )
+                st.caption(
+                    "Release-day stdev of each factor's daily change vs all "
+                    "non-release trading days (bps)."
+                )
+
+        # --- ex-ante gap signal ---------------------------------------------
+        if "analysis_gap_trade" in table_names():
+            gap = load_table("analysis_gap_trade")
+            gp = gap[gap.indicator == indicator]
+            if not gp.empty:
+                st.subheader("Ex-ante test: is the public nowcast already priced?")
+                st.dataframe(
+                    gp[["factor", "n", "hit_rate", "mean_pnl", "t_pnl",
+                        "gamma", "gamma_p"]].round(3),
+                    use_container_width=True, hide_index=True,
+                )
+                st.caption(
+                    "Rule: at the close before the release, position in the "
+                    "direction of (public nowcast − previous print); exit at "
+                    "the release-day close. mean_pnl is gross bps per trade. "
+                    "The signal uses only information public before the print."
+                )
+
 # --------------------------------------------------------------- curve tab
 with tab_curve:
     curve = load_curve()

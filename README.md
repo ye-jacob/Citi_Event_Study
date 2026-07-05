@@ -25,6 +25,11 @@ factor change across the release (bps):
 4. **Event study** — cumulative abnormal factor changes from 5 days before to
    10 days after top/bottom-decile surprises, benchmarked against the mean
    release-day change on non-extreme releases.
+5. **Trading-oriented tests** — betas re-estimated pre/post the 2021 inflation
+   era; release-day vs ordinary-day volatility per indicator; and an ex-ante
+   check that the *public* nowcast is already priced by the prior close
+   (position on nowcast−previous at t−1 close, exit at t close: hit rate and
+   bps per trade).
 
 All regressions are per indicator (never pooled) with White
 heteroskedasticity-robust standard errors (HC1).

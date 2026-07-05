@@ -60,6 +60,7 @@ MEASURE_COLORS = {
 # downside); the expectation measures are two entities with fixed slots.
 SIGN_COLORS = {"hot": _SLOTS[5], "cold": _SLOTS[0], "positive": _SLOTS[5], "negative": _SLOTS[0]}
 EXPECTATION_COLORS = {"nowcast": _SLOTS[0], "naive": _SLOTS[4]}
+ERA_COLORS = {"pre_2021": _SLOTS[4], "post_2021": _SLOTS[0]}
 
 FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
 ACCENT = _SLOTS[0]

@@ -30,11 +30,17 @@ from src.analytics.event_study import (
     fit_baseline,
     release_day_changes,
 )
-from src.analytics.surprise import standardized_surprises
+from src.analytics.surprise import label_expectation, standardized_surprises
+from src.analytics.trading import (
+    build_gap_frame,
+    era_split,
+    event_day_vol,
+    gap_signal_stats,
+)
 
 RELEASES_SQL = """
     SELECT i.key AS indicator, r.ref_period, r.release_datetime,
-           r.actual, r.consensus, r.source
+           r.actual, r.consensus, r.previous, r.source
     FROM releases r JOIN indicators i ON i.id = r.indicator_id
 """
 
@@ -68,11 +74,28 @@ def main(argv: list[str] | None = None) -> int:
     asymmetry = fit_asymmetric(obs)
     cars = event_study_cars(obs, curve)
 
+    # Trading-oriented tests (src/analytics/trading.py).
+    gap = gap_signal_stats(build_gap_frame(releases, curve))
+    nowcast_dates = releases[
+        releases["source"].map(label_expectation) == "nowcast"
+    ][["indicator", "release_datetime"]]
+    vol_full = event_day_vol(nowcast_dates, curve).assign(window="full")
+    cut = pd.Timestamp("2021-01-01")
+    vol_post = event_day_vol(
+        nowcast_dates[nowcast_dates["release_datetime"] >= cut],
+        curve.loc[curve.index >= cut],
+    ).assign(window="post_2021")
+    vol = pd.concat([vol_full, vol_post], ignore_index=True)
+    eras = era_split(obs)
+
     engine = db.get_engine(args.db)
     obs.to_sql("analysis_observations", engine, if_exists="replace", index=False)
     baseline.to_sql("analysis_baseline", engine, if_exists="replace", index=False)
     asymmetry.to_sql("analysis_asymmetry", engine, if_exists="replace", index=False)
     cars.to_sql("analysis_event_study", engine, if_exists="replace", index=False)
+    gap.to_sql("analysis_gap_trade", engine, if_exists="replace", index=False)
+    vol.to_sql("analysis_event_vol", engine, if_exists="replace", index=False)
+    eras.to_sql("analysis_era", engine, if_exists="replace", index=False)
 
     dropped = obs.attrs.get("dropped_no_window", 0)
     print(
@@ -96,6 +119,23 @@ def main(argv: list[str] | None = None) -> int:
         )
         .round(3)
         .to_string()
+    )
+    print("\nevent-day vol ratio (release-day sd / ordinary-day sd), level:")
+    print(
+        vol[vol.factor == "level"][
+            ["indicator", "window", "n_event", "sd_event", "sd_control", "vol_ratio"]
+        ].round(2).to_string(index=False)
+    )
+    print("\nex-ante gap signal (t-1 close -> t close, gross bps/trade):")
+    print(
+        gap[["indicator", "factor", "n", "hit_rate", "mean_pnl", "t_pnl", "gamma_p"]]
+        .round(3)
+        .to_string(index=False)
+    )
+    print("\nCPI level beta by era:")
+    era_cpi = eras[(eras.indicator == "CPI") & (eras.factor == "level")]
+    print(
+        era_cpi[["era", "n", "beta", "se", "p", "r2"]].round(3).to_string(index=False)
     )
     return 0
 
