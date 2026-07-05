@@ -36,7 +36,9 @@ def test_export_writes_both_csvs(tmp_path):
         "consensus_stdev,n_estimates,previous,is_first_print,source"
     )
     assert len(releases) == 2
-    assert releases[1].startswith("CPI,% m/m,2024-03-01")
+    # Datetime carries the full date, minute precision, NO microseconds —
+    # fractional seconds trip Excel's mm:ss.0 display and invite corruption.
+    assert releases[1].startswith("CPI,% m/m,2024-03-01,2024-04-10 08:30,")
 
     curve = (paths["curve"]).read_text().splitlines()
     assert curve[0] == "date,2Y,10Y"  # registry tenor order, only present tenors

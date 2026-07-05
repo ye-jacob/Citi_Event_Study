@@ -53,7 +53,7 @@ inflation stops being the binding concern.
 
 The event study (top and bottom surprise deciles, 16 events per tail) places
 the response on the release day itself: hot prints jump the level about
-+4.8bp and 5s30s about −3.0bp on day 0 versus the control-day benchmark,
++4.9bp and 5s30s about −3.0bp on day 0 versus the control-day benchmark,
 cold prints do roughly the mirror image, and the paths before and after stay
 within noise for a 16-event average. There is no reliable post-print drift
 to chase. Asymmetry point estimates say soft prints move the level more than
@@ -248,6 +248,7 @@ python -m src.ingest.export_csv   # audit CSVs + data dictionary
 ```
 
 Results land in the analysis_* tables of data/event_study.db (baseline,
-asymmetry, event_study, era, event_vol, gap_trade) and render in the
-Streamlit app's Results tab. Data provenance, column by column with links:
-data/exports/DATA_DICTIONARY.md.
+asymmetry, event_study, era, event_vol, gap_trade) and are illustrated in
+analysis/findings.ipynb. Every number quoted above is cross-checked against
+the tables by `python -m src.analytics.verify_paper`. Data provenance, column
+by column with links: data/exports/DATA_DICTIONARY.md.

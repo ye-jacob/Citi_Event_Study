@@ -6,7 +6,8 @@ For CPI, PCE and GDP releases, I measure the one-day response of four curve
 factors — level (10Y), 2s10s slope, 5s30s slope, curvature (2×10Y − 2Y − 30Y) —
 to the *standardized surprise* in the print, using first-print data and free
 public consensus. The writeup is [`analysis/findings.md`](analysis/findings.md);
-the Streamlit app is a demo layer over the precomputed results.
+[`analysis/findings.ipynb`](analysis/findings.ipynb) illustrates the results
+(pre-executed, so the charts render right on GitHub).
 
 ## Methodology (implemented in `src/analytics/`)
 
@@ -70,26 +71,26 @@ export $(grep -v '^#' .env | xargs)
 python -m src.ingest.run_ingest --vintage first   # data  (vintage is an explicit choice)
 python -m src.analytics.run_analysis              # results -> analysis_* tables
 python -m src.ingest.export_csv                   # audit CSVs -> data/exports/
-streamlit run src/app/app.py                      # results explorer
+python -m src.analytics.verify_paper              # paper numbers vs tables
+jupyter notebook analysis/findings.ipynb          # the findings, illustrated
 pytest                                            # offline test suite
 ```
 
 The GitHub Actions workflow (`.github/workflows/ingest.yml`, manual dispatch)
-refreshes data, recomputes results, and commits the DB — the app only reads.
-Requires a `FRED_API_KEY` repo secret.
+refreshes the data, recomputes results, and commits the DB. Requires a
+`FRED_API_KEY` repo secret.
 
 ## Layout
 
 ```
-analysis/findings.md      the writeup (in progress)
+analysis/findings.md      the writeup
+analysis/findings.ipynb   the findings, illustrated (simple, pre-executed)
 data/event_study.db       committed SQLite: raw tables + analysis_* results
 data/exports/             audit CSVs + DATA_DICTIONARY.md
 src/sources/              FRED/ALFRED client, Cleveland Fed + GDPNow consensus,
                           naive proxy, manual-CSV importer (DataSource interface)
-src/analytics/            surprise.py, event_study.py, run_analysis.py, curve.py
-src/app/app.py            read-only Streamlit demo (Results / Curve / Releases)
-src/charts.py             Plotly helpers (CVD-validated palette)
-tests/                    75 offline tests
+src/analytics/            surprise, event_study, trading, run_analysis, verify_paper
+tests/                    offline test suite
 ```
 
 ## Limitations

@@ -31,8 +31,19 @@ CURVE_SQL = "SELECT date, tenor, yield AS yield_pct FROM curve ORDER BY date"
 def export(db_path: Path, out_dir: Path) -> dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as con:
-        releases = pd.read_sql(RELEASES_SQL, con)
+        releases = pd.read_sql(
+            RELEASES_SQL, con, parse_dates=["ref_period", "release_datetime"]
+        )
         curve_long = pd.read_sql(CURVE_SQL, con)
+
+    # Explicit date formats, no microseconds: fractional seconds make Excel
+    # display datetimes as "mm:ss.0", and a save from Excel then destroys the
+    # column. These forms survive both pandas parse_dates and a spreadsheet
+    # round trip legibly.
+    releases["ref_period"] = releases["ref_period"].dt.strftime("%Y-%m-%d")
+    releases["release_datetime"] = releases["release_datetime"].dt.strftime(
+        "%Y-%m-%d %H:%M"
+    )
 
     releases_path = out_dir / "releases.csv"
     releases.to_csv(releases_path, index=False)

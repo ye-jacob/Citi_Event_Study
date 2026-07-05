@@ -1,6 +1,7 @@
-# Scheduled ingest: pulls FRED/ALFRED data and commits the refreshed SQLite DB.
-# The Action is the backend; the Streamlit app only reads committed data
-# (CLAUDE.md "Deployment"). Requires a FRED_API_KEY repo secret.
+# Scheduled ingest: pulls FRED/ALFRED data, recomputes the analysis tables,
+# and commits the refreshed SQLite DB + audit exports. Requires a
+# FRED_API_KEY repo secret. (After a refresh, re-execute the notebook and
+# re-run verify_paper locally — results can drift with new releases.)
 name: ingest
 
 on:
